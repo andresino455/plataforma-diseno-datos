@@ -1,0 +1,36 @@
+{
+  "diagramId": "demo-001",
+  "type": "data-model",
+  "projectName": "TiendaOnline",
+  "basePackage": "com.tienda.generado",
+  "entities": [
+    {
+      "id": "e1",
+      "name": "Cliente",
+      "attributes": [
+        { "id": "a1", "name": "id", "type": "UUID", "isPrimaryKey": true },
+        { "id": "a2", "name": "nombre", "type": "String", "nullable": false },
+        { "id": "a3", "name": "correo", "type": "String", "unique": true, "nullable": false }
+      ]
+    },
+    {
+      "id": "e2",
+      "name": "Pedido",
+      "attributes": [
+        { "id": "b1", "name": "id", "type": "UUID", "isPrimaryKey": true },
+        { "id": "b2", "name": "fecha", "type": "Date", "nullable": false },
+        { "id": "b3", "name": "total", "type": "Double", "nullable": false }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "r1",
+      "from": "e1",
+      "to": "e2",
+      "type": "ONE_TO_MANY",
+      "fromRole": "pedidos",
+      "toRole": "cliente"
+    }
+  ]
+}

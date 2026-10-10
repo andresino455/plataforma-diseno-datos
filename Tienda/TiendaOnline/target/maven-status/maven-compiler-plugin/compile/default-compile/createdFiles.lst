@@ -1,0 +1,9 @@
+com\tienda\generado\repository\ClienteRepository.class
+com\tienda\generado\service\ClienteService.class
+com\tienda\generado\entity\Cliente.class
+com\tienda\generado\service\PedidoService.class
+com\tienda\generado\controller\PedidoController.class
+com\tienda\generado\repository\PedidoRepository.class
+com\tienda\generado\TiendaOnlineApplication.class
+com\tienda\generado\controller\ClienteController.class
+com\tienda\generado\entity\Pedido.class
