@@ -7,4 +7,4 @@
 /// real acá adentro — movelo a una variable de entorno o a un archivo
 /// separado ignorado por git. Para un repo privado de la materia, dejarlo
 /// acá es aceptable.
-const String huggingFaceToken = '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';
+const String huggingFaceToken = 'PEGÁ_ACÁ_TU_TOKEN_HF';
