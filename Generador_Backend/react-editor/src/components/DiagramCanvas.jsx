@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -12,6 +12,18 @@ import EntityNode from "./EntityNode";
 const nodeTypes = { entityNode: EntityNode };
 
 export default function DiagramCanvas({ entities, relationships, onEntityPositionChange }) {
+  const flowRef = useRef(null);
+  const previousCount = useRef(entities.length);
+
+  // Cuando se agrega o quita una entidad (por mí, por el chat o por otra
+  // persona) se reencuadra el diagrama para que la nueva quede a la vista.
+  useEffect(() => {
+    if (previousCount.current === entities.length) return undefined;
+    previousCount.current = entities.length;
+    const timer = setTimeout(() => flowRef.current?.fitView({ padding: 0.12, duration: 300 }), 150);
+    return () => clearTimeout(timer);
+  }, [entities.length]);
+
   const nodes = useMemo(
     () =>
       entities.map((entity) => ({
@@ -62,7 +74,13 @@ export default function DiagramCanvas({ entities, relationships, onEntityPositio
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
+        onInit={(instance) => {
+          flowRef.current = instance;
+        }}
         fitView
+        fitViewOptions={{ padding: 0.12 }}
+        minZoom={0.1}
+        maxZoom={2}
       >
         <Background gap={16} color="#d8d5cc" />
         <Controls showInteractive={false} />

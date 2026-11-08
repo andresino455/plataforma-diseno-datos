@@ -1,8 +1,11 @@
-node_modules/ 
-dist/ 
-output/ 
-.env build/ 
-.dart_tool/ 
-.gradle/ 
-*.apk 
+node_modules/
+dist/
+output/
+build/
+data/
+.env
+.dart_tool/
+.gradle/
+*.apk
 local.properties
+target/

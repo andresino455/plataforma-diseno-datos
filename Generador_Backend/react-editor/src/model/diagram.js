@@ -7,10 +7,56 @@ export const TYPES = ["UUID", "String", "Integer", "Long", "Double", "Boolean", 
 
 export const RELATIONSHIP_TYPES = ["ONE_TO_MANY"]; // el generador hoy solo soporta este tipo
 
-let counter = 0;
+// Los ids deben ser únicos entre TODAS las personas y sesiones: el diagrama se
+// guarda y se comparte, así que un contador que arranca en 0 en cada recarga
+// repetiría ids ("e1", "e2"...) y el lienzo descartaría las entidades duplicadas.
 export function uid(prefix) {
-  counter += 1;
-  return `${prefix}${counter}`;
+  const random =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID().replace(/-/g, "").slice(0, 10)
+      : Math.random().toString(36).slice(2, 12);
+  return `${prefix}_${random}`;
+}
+
+// Repara diagramas guardados con ids repetidos (de cuando los ids eran e1, e2...).
+// Devuelve los mismos objetos si no hay nada que arreglar.
+export function ensureUniqueIds(entities, relationships = []) {
+  let changed = false;
+
+  const seenEntities = new Set();
+  const fixedEntities = entities.map((entity) => {
+    let next = entity;
+    if (!entity.id || seenEntities.has(entity.id)) {
+      next = { ...next, id: uid("e") };
+      changed = true;
+    }
+    seenEntities.add(next.id);
+
+    const seenAttrs = new Set();
+    const attributes = (next.attributes || []).map((attr) => {
+      if (!attr.id || seenAttrs.has(attr.id)) {
+        changed = true;
+        attr = { ...attr, id: uid("a") };
+      }
+      seenAttrs.add(attr.id);
+      return attr;
+    });
+    return attributes.some((a, i) => a !== next.attributes[i]) ? { ...next, attributes } : next;
+  });
+
+  const seenRels = new Set();
+  const fixedRelationships = relationships.map((rel) => {
+    if (!rel.id || seenRels.has(rel.id)) {
+      changed = true;
+      rel = { ...rel, id: uid("r") };
+    }
+    seenRels.add(rel.id);
+    return rel;
+  });
+
+  return changed
+    ? { entities: fixedEntities, relationships: fixedRelationships }
+    : { entities, relationships };
 }
 
 export function createEmptyEntity(index = 0, name = "NuevaEntidad") {
@@ -24,12 +70,32 @@ export function createEmptyEntity(index = 0, name = "NuevaEntidad") {
   };
 }
 
+// Primer lugar libre de una grilla, para que una entidad nueva no quede
+// encima de otra ni fuera de vista (las tarjetas miden ~260 px de ancho).
+export function findFreePosition(entities) {
+  const COLS = 3;
+  const SPACING_X = 360; // deja ~100 px entre tarjetas para que se vean las líneas de relación
+  const SPACING_Y = 300;
+  for (let i = 0; ; i += 1) {
+    const pos = { x: (i % COLS) * SPACING_X, y: Math.floor(i / COLS) * SPACING_Y };
+    const taken = entities.some((e) => {
+      const p = e.position || { x: 0, y: 0 };
+      return Math.abs(p.x - pos.x) < SPACING_X - 20 && Math.abs(p.y - pos.y) < SPACING_Y - 20;
+    });
+    if (!taken) return pos;
+  }
+}
+
+export function createEntityInFreeSpot(existingEntities, name = "NuevaEntidad") {
+  return { ...createEmptyEntity(0, name), position: findFreePosition(existingEntities) };
+}
+
 // Ubica las entidades nuevas en una grilla simple para que no aparezcan
 // todas amontonadas en el mismo punto del lienzo.
 export function gridPosition(index) {
   const COLS = 3;
-  const SPACING_X = 260;
-  const SPACING_Y = 220;
+  const SPACING_X = 360;
+  const SPACING_Y = 300;
   return {
     x: (index % COLS) * SPACING_X,
     y: Math.floor(index / COLS) * SPACING_Y,
@@ -127,7 +193,7 @@ export function applyOperations(entities, relationships, operations) {
           warnings.push(`La entidad "${op.name}" ya existe, no se creó de nuevo.`);
           break;
         }
-        nextEntities.push(createEmptyEntity(nextEntities.length, op.name));
+        nextEntities.push(createEntityInFreeSpot(nextEntities, op.name));
         break;
       }
 

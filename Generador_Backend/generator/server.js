@@ -13,15 +13,31 @@ const { interpretCommand, summarizeDiagram } = require("./src/aiAssistant");
 const { interpretDiagramImage } = require("./src/imageImport");
 const http = require("http");
 const { setupCollaboration } = require("./src/collaboration");
+const { requireAuth } = require("./src/auth");
+const { getStatus: getAiStatus } = require("./src/llm");
+const authRoutes = require("./src/routes/auth");
+const projectRoutes = require("./src/routes/projects");
+const invitationRoutes = require("./src/routes/invitations");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 const server = http.createServer(app);
-setupCollaboration(server);
+const collab = setupCollaboration(server);
+app.locals.collab = collab; // las rutas lo usan para desconectar a quien sacan de un proyecto
 
 app.use(cors()); // el editor React corre en otro puerto (5173), necesita CORS habilitado
 app.use(express.json({ limit: "12mb" })); // las imágenes en base64 pesan más que el JSON del diagrama
+
+// ── Cuentas de usuario, proyectos e invitaciones ─────────────────────────────
+app.use("/api/auth", authRoutes);
+app.use("/api/projects", requireAuth, projectRoutes);
+app.use("/api/invitations", requireAuth, invitationRoutes);
+
+// Estado del modelo de IA del chat (¿está Ollama abierto y con el modelo descargado?).
+app.get("/api/ai/status", requireAuth, async (req, res) => {
+  res.json(await getAiStatus());
+});
 
 /**
  * POST /api/generate
@@ -29,7 +45,7 @@ app.use(express.json({ limit: "12mb" })); // las imágenes en base64 pesan más 
  * Respuesta: un .zip con el proyecto Spring Boot generado, listo para
  * descomprimir y abrir en el IDE.
  */
-app.post("/api/generate", (req, res) => {
+app.post("/api/generate", requireAuth, (req, res) => {
   const diagram = req.body;
 
   if (!diagram || !diagram.entities || diagram.entities.length === 0) {
@@ -82,7 +98,7 @@ app.get("/api/health", (req, res) => {
  * react-editor/src/model/diagram.js) — así la IA nunca tiene control directo
  * sobre los datos, solo propone cambios que el sistema valida y ejecuta.
  */
-app.post("/api/assistant/command", async (req, res) => {
+app.post("/api/assistant/command", requireAuth, async (req, res) => {
   const { diagram, command } = req.body || {};
 
   if (!command || !command.trim()) {
@@ -105,7 +121,7 @@ app.post("/api/assistant/command", async (req, res) => {
  * Respuesta: { message, operations } — mismo contrato que /api/assistant/command,
  * así que el frontend aplica el resultado con la misma función applyOperations.
  */
-app.post("/api/assistant/import-image", async (req, res) => {
+app.post("/api/assistant/import-image", requireAuth, async (req, res) => {
   const { imageBase64, mimeType } = req.body || {};
 
   if (!imageBase64 || !mimeType) {
@@ -123,6 +139,8 @@ app.post("/api/assistant/import-image", async (req, res) => {
 
 /**
  * POST /api/assistant/generate-screen
+ * (Sin requireAuth a propósito: lo usa la app móvil Flutter, que todavía no
+ * tiene pantalla de login. Si se agrega, proteger este endpoint también.)
  * Body: { command: "...", availableEntities: [{name, fields}] }
  * Respuesta: { message, screenSpec }
  */
@@ -141,6 +159,14 @@ app.post("/api/assistant/generate-screen", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Al apagar con Ctrl+C, guardar los diagramas que estén pendientes de escribir.
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    collab.flushAll();
+    process.exit(0);
+  });
+}
 
 server.listen(PORT, () => {
   console.log(`✔ Servidor del generador escuchando en http://localhost:${PORT}`);
