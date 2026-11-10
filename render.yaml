@@ -1,0 +1,41 @@
+# Despliegue en Render (https://render.com) como "Blueprint".
+# UN solo servicio web: el servidor Node entrega la API, el WebSocket del
+# chat/colaboración y el editor React ya compilado.
+#
+# Variables que se piden al crear el servicio en el panel de Render:
+#   GROQ_API_KEY  tu clave de Groq (se escribe en el panel, no en este archivo)
+#
+# IMPORTANTE sobre los datos (usuarios, proyectos y chat viven en un archivo
+# SQLite): con plan "free" ese archivo se BORRA en cada reinicio, despliegue o
+# cuando el servicio se duerme por inactividad. Para conservar los datos hay
+# que usar un plan de pago y activar el disco de abajo (descomentar).
+
+services:
+  - type: web
+    name: editor-modelo-datos
+    runtime: node
+    # --ignore-scripts: better-sqlite3 ya trae su binario compilado para Linux;
+    # así no intenta compilarlo desde el código fuente (lento y puede fallar).
+    plan: free # cambiar a un plan de pago (por ej. starter) si se activa el disco
+    buildCommand: >-
+      npm --prefix Generador_Backend/react-editor install --include=dev &&
+      npm --prefix Generador_Backend/react-editor run build &&
+      npm --prefix Generador_Backend/generator install --ignore-scripts
+    startCommand: npm --prefix Generador_Backend/generator start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # --- Solo con plan de pago: guardar la base de datos en un disco ---
+      # - key: DATA_DIR
+      #   value: /var/data
+    # disk:
+    #   name: datos
+    #   mountPath: /var/data
+    #   sizeGB: 1

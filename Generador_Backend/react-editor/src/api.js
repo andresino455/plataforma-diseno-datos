@@ -1,7 +1,20 @@
-// Punto único de comunicación con el servidor (generator, puerto 4000).
-// Si el servidor corre en otra dirección, se cambia solo acá.
-export const API_BASE = "http://localhost:4000";
-export const WS_BASE = "ws://localhost:4000";
+// Punto único de comunicación con el servidor (generator).
+//  - Desarrollo (npm run dev): el editor corre en :5173 y el servidor en :4000.
+//  - Producción (Render): el servidor también entrega el editor, así que todo
+//    está en la misma dirección y se usan URLs relativas (y wss:// con https).
+//  - Si el servidor está en otra dirección, definí VITE_API_URL al compilar.
+const configuredUrl = import.meta.env.VITE_API_URL;
+
+export const API_BASE =
+  configuredUrl !== undefined
+    ? configuredUrl.replace(/\/$/, "")
+    : import.meta.env.DEV
+      ? "http://localhost:4000"
+      : "";
+
+export const WS_BASE = API_BASE
+  ? API_BASE.replace(/^http/, "ws")
+  : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 
 const TOKEN_KEY = "auth_token";
 

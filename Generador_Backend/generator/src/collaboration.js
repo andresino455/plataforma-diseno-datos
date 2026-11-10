@@ -116,7 +116,27 @@ function setupCollaboration(server) {
     }
   }
 
+  // Latido: cada 30 s se le hace "ping" a cada cliente; si no contestó el
+  // anterior, la conexión está muerta y se cierra. Además evita que los
+  // proxies (Render) corten conexiones que parecen inactivas.
+  const heartbeat = setInterval(() => {
+    for (const client of wss.clients) {
+      if (client.isAlive === false) {
+        client.terminate();
+        continue;
+      }
+      client.isAlive = false;
+      client.ping();
+    }
+  }, 30000);
+  heartbeat.unref();
+  wss.on("close", () => clearInterval(heartbeat));
+
   wss.on("connection", (ws, req) => {
+    ws.isAlive = true;
+    ws.on("pong", () => {
+      ws.isAlive = true;
+    });
     ws.on("error", () => {});
 
     const { query } = parse(req.url, true);

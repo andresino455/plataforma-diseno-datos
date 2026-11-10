@@ -160,6 +160,31 @@ app.post("/api/assistant/generate-screen", async (req, res) => {
   }
 });
 
+// ── Editor web (producción) ──────────────────────────────────────────────────
+// En Render se despliega UN solo servicio: este servidor también entrega el
+// editor ya compilado (react-editor/dist), así la web y la API comparten
+// dirección y no hace falta configurar CORS ni URLs. En desarrollo la carpeta
+// dist no existe (el editor corre con "npm run dev") y esto no hace nada.
+const EDITOR_DIST = path.join(__dirname, "..", "react-editor", "dist");
+const EDITOR_INDEX = path.join(EDITOR_DIST, "index.html");
+
+if (fs.existsSync(EDITOR_INDEX)) {
+  app.use(
+    express.static(EDITOR_DIST, {
+      setHeaders(res, filePath) {
+        // El HTML nunca se cachea (así una nueva versión se ve al instante);
+        // los archivos de /assets llevan hash en el nombre y sí se pueden cachear.
+        if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-cache");
+      },
+    })
+  );
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api")) return res.sendFile(EDITOR_INDEX);
+    next();
+  });
+  console.log("  Sirviendo el editor web desde react-editor/dist");
+}
+
 // Al apagar con Ctrl+C, guardar los diagramas que estén pendientes de escribir.
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
@@ -169,6 +194,6 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 
 server.listen(PORT, () => {
-  console.log(`✔ Servidor del generador escuchando en http://localhost:${PORT}`);
+  console.log(`✔ Servidor del generador escuchando en el puerto ${PORT} (http://localhost:${PORT})`);
   console.log(`  Probalo con: POST http://localhost:${PORT}/api/generate`);
 });

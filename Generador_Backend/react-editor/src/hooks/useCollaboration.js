@@ -54,62 +54,89 @@ export function useCollaboration(diagramJson, onRemoteDiagram, projectId, onAcce
   const [chatLoaded, setChatLoaded] = useState(false);
   const [aiTyping, setAiTyping] = useState(false);
 
-  // Conectar una sola vez por projectId.
+  // Conectar una vez por projectId, y reconectar solo si la conexión se cae
+  // (servidor reiniciado, red inestable, o un servidor "dormido" que tarda
+  // en despertar) con esperas crecientes: 1 s, 2 s, 4 s... hasta 15 s.
   useEffect(() => {
     if (!projectId) return undefined;
 
-    const token = getToken();
-    const ws = new WebSocket(
-      `${COLLAB_WS_BASE_URL}?projectId=${encodeURIComponent(projectId)}&token=${encodeURIComponent(token ?? "")}`
-    );
-    wsRef.current = ws;
+    let cancelled = false;
+    let attempt = 0;
+    let retryTimer = null;
 
-    // Ignora eventos de una conexión vieja (pasa en desarrollo, donde React
-    // monta los efectos dos veces) para que no pisen el estado de la nueva.
-    const isCurrent = () => wsRef.current === ws;
+    function connect() {
+      const token = getToken();
+      const ws = new WebSocket(
+        `${COLLAB_WS_BASE_URL}?projectId=${encodeURIComponent(projectId)}&token=${encodeURIComponent(token ?? "")}`
+      );
+      wsRef.current = ws;
 
-    ws.onopen = () => isCurrent() && setConnected(true);
-    ws.onclose = (event) => {
-      if (!isCurrent()) return;
-      setConnected(false);
-      setAiTyping(false);
-      if (event.code === 4401 || event.code === 4403 || event.code === 4404) {
-        onAccessLostRef.current?.(event.code);
-      }
+      // Ignora eventos de una conexión vieja (pasa en desarrollo, donde React
+      // monta los efectos dos veces) para que no pisen el estado de la nueva.
+      const isCurrent = () => wsRef.current === ws;
+
+      ws.onopen = () => {
+        if (!isCurrent()) return;
+        attempt = 0;
+        setConnected(true);
+      };
+
+      ws.onclose = (event) => {
+        if (!isCurrent() || cancelled) return;
+        setConnected(false);
+        setAiTyping(false);
+
+        // Cierres por acceso (sesión vencida, ya no sos miembro, proyecto eliminado): no reintentar.
+        if (event.code === 4401 || event.code === 4403 || event.code === 4404) {
+          onAccessLostRef.current?.(event.code);
+          return;
+        }
+
+        const delay = Math.min(1000 * 2 ** attempt, 15000);
+        attempt += 1;
+        retryTimer = setTimeout(connect, delay);
+      };
+
+      ws.onerror = () => isCurrent() && setConnected(false);
+
+      ws.onmessage = (event) => {
+        if (!isCurrent()) return;
+        let msg;
+        try {
+          msg = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+
+        if (msg.type === "welcome") {
+          setMyPresence({ id: msg.id, name: msg.name, color: msg.color });
+        } else if (msg.type === "presence") {
+          setCollaborators(msg.users);
+        } else if (msg.type === "diagram_update") {
+          suppressNextBroadcastRef.current = true;
+          onRemoteDiagramRef.current(msg.diagram);
+        } else if (msg.type === "chat_history") {
+          setChatMessages(msg.messages);
+          setChatLoaded(true);
+        } else if (msg.type === "chat_message") {
+          setChatMessages((prev) => (prev.some((m) => m.id === msg.message.id) ? prev : [...prev, msg.message]));
+        } else if (msg.type === "chat_message_update") {
+          setChatMessages((prev) => prev.map((m) => (m.id === msg.message.id ? msg.message : m)));
+        } else if (msg.type === "ai_typing") {
+          setAiTyping(Boolean(msg.typing));
+        } else if (msg.type === "chat_apply_granted") {
+          onApplyOperationsRef.current?.(msg.operations);
+        }
+      };
+    }
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+      wsRef.current?.close();
     };
-    ws.onerror = () => isCurrent() && setConnected(false);
-
-    ws.onmessage = (event) => {
-      if (!isCurrent()) return;
-      let msg;
-      try {
-        msg = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-
-      if (msg.type === "welcome") {
-        setMyPresence({ id: msg.id, name: msg.name, color: msg.color });
-      } else if (msg.type === "presence") {
-        setCollaborators(msg.users);
-      } else if (msg.type === "diagram_update") {
-        suppressNextBroadcastRef.current = true;
-        onRemoteDiagramRef.current(msg.diagram);
-      } else if (msg.type === "chat_history") {
-        setChatMessages(msg.messages);
-        setChatLoaded(true);
-      } else if (msg.type === "chat_message") {
-        setChatMessages((prev) => (prev.some((m) => m.id === msg.message.id) ? prev : [...prev, msg.message]));
-      } else if (msg.type === "chat_message_update") {
-        setChatMessages((prev) => prev.map((m) => (m.id === msg.message.id ? msg.message : m)));
-      } else if (msg.type === "ai_typing") {
-        setAiTyping(Boolean(msg.typing));
-      } else if (msg.type === "chat_apply_granted") {
-        onApplyOperationsRef.current?.(msg.operations);
-      }
-    };
-
-    return () => ws.close();
   }, [projectId]);
 
   // Difundir el diagrama local cuando cambia, salvo que el cambio haya sido
