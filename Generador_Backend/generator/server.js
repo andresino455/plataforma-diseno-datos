@@ -18,6 +18,7 @@ const { getStatus: getAiStatus } = require("./src/llm");
 const authRoutes = require("./src/routes/auth");
 const projectRoutes = require("./src/routes/projects");
 const invitationRoutes = require("./src/routes/invitations");
+const chatFileRoutes = require("./src/routes/chatFiles");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -28,7 +29,7 @@ app.locals.collab = collab; // las rutas lo usan para desconectar a quien sacan 
 
 app.use(cors()); // el editor React corre en otro puerto (5173), necesita CORS habilitado
 app.use(express.json({ limit: "12mb" })); // las imágenes en base64 pesan más que el JSON del diagrama
-
+app.use("/api/chat", requireAuth, chatFileRoutes);
 // ── Cuentas de usuario, proyectos e invitaciones ─────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/projects", requireAuth, projectRoutes);

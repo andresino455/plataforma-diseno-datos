@@ -393,11 +393,19 @@ export default function ProjectEditor({ project, onExit }) {
   return (
     <div className={`app-shell ${canvasFocus ? "app-shell--focus" : ""}`}>
       <header>
-        <button className="nav-btn" onClick={onExit} title="Volver a la lista de proyectos">
+        <button
+          className="nav-btn"
+          onClick={onExit}
+          title="Volver a la lista de proyectos"
+        >
           ← Mis proyectos
         </button>
         <h1 title={project.name}>{project.name}</h1>
-        <CollaboratorsBar collaborators={collaborators} myPresence={myPresence} connected={connected} />
+        <CollaboratorsBar
+          collaborators={collaborators}
+          myPresence={myPresence}
+          connected={connected}
+        />
         <MembersButton project={project} onLeft={onExit} />
         <span className="user-chip" title={user.email}>
           {user.name}
@@ -417,7 +425,10 @@ export default function ProjectEditor({ project, onExit }) {
       />
 
       <main
-        className={[formCollapsed || canvasFocus ? "main--collapsed" : "", chatOpen ? "main--chat" : ""]
+        className={[
+          formCollapsed || canvasFocus ? "main--collapsed" : "",
+          chatOpen ? "main--chat" : "",
+        ]
           .filter(Boolean)
           .join(" ")}
       >
@@ -448,7 +459,11 @@ export default function ProjectEditor({ project, onExit }) {
 
           <section className="block">
             <h2>Entidades</h2>
-            {entities.length === 0 && <p className="empty-hint">Todavía no agregaste ninguna entidad.</p>}
+            {entities.length === 0 && (
+              <p className="empty-hint">
+                Todavía no agregaste ninguna entidad.
+              </p>
+            )}
             {entities.map((entity) => (
               <EntityCard
                 key={entity.id}
@@ -457,12 +472,18 @@ export default function ProjectEditor({ project, onExit }) {
                 onRemove={() => removeEntity(entity.id)}
               />
             ))}
-            <button className="add-btn" onClick={addEntity}>+ Agregar entidad</button>
+            <button className="add-btn" onClick={addEntity}>
+              + Agregar entidad
+            </button>
           </section>
 
           <section className="block">
             <h2>Relaciones</h2>
-            {relationships.length === 0 && <p className="empty-hint">Todavía no agregaste ninguna relación.</p>}
+            {relationships.length === 0 && (
+              <p className="empty-hint">
+                Todavía no agregaste ninguna relación.
+              </p>
+            )}
             {relationships.map((rel) => (
               <RelationshipCard
                 key={rel.id}
@@ -472,11 +493,15 @@ export default function ProjectEditor({ project, onExit }) {
                 onRemove={() => removeRelationship(rel.id)}
               />
             ))}
-            <button className="add-btn" onClick={addRelationship}>+ Agregar relación</button>
+            <button className="add-btn" onClick={addRelationship}>
+              + Agregar relación
+            </button>
           </section>
         </div>
 
-        <div className={`panel-preview ${previewView === "diagram" ? "panel-preview--diagram" : ""}`}>
+        <div
+          className={`panel-preview ${previewView === "diagram" ? "panel-preview--diagram" : ""}`}
+        >
           <div className="preview-tabs">
             <button
               className={previewView === "diagram" ? "tab-active" : ""}
@@ -503,7 +528,9 @@ export default function ProjectEditor({ project, onExit }) {
               onClick={() => setCanvasFocus((v) => !v)}
               title="Lienzo a pantalla completa (oculta cabecera, asistente y barra inferior)"
             >
-              {canvasFocus ? "🗗 Salir de pantalla completa" : "⛶ Pantalla completa"}
+              {canvasFocus
+                ? "🗗 Salir de pantalla completa"
+                : "⛶ Pantalla completa"}
             </button>
             <button
               className={chatOpen ? "tab-active" : ""}
@@ -511,7 +538,9 @@ export default function ProjectEditor({ project, onExit }) {
               title="Chat del equipo con la IA como moderadora y desarrolladora"
             >
               💬 Chat
-              {!chatOpen && unreadChat > 0 && <span className="chat-badge">{unreadChat}</span>}
+              {!chatOpen && unreadChat > 0 && (
+                <span className="chat-badge">{unreadChat}</span>
+              )}
             </button>
           </div>
 
@@ -528,22 +557,38 @@ export default function ProjectEditor({ project, onExit }) {
         </div>
 
         {chatOpen && (
-          <ChatPanel chat={chat} myId={myPresence?.id} connected={connected} onClose={toggleChat} />
+          <ChatPanel
+            chat={chat}
+            myId={myPresence?.id}
+            connected={connected}
+            onClose={toggleChat}
+            projectId={project?.id}
+          />
         )}
       </main>
 
       <div className="toolbar-wrapper">
         <div className="toolbar">
-          <button className="primary" onClick={handleGenerateBackend} disabled={generating}>
+          <button
+            className="primary"
+            onClick={handleGenerateBackend}
+            disabled={generating}
+          >
             {generating ? "Generando..." : "⚙ Generar backend"}
           </button>
           <button onClick={handleDownload}>Descargar diagrama.json</button>
           <button onClick={handleExportDrawio}>📐 Exportar a draw.io</button>
-          <button onClick={() => drawioFileInputRef.current?.click()}>📥 Importar draw.io</button>
-          <button onClick={handleLoadSample}>Cargar ejemplo (Cliente/Pedido)</button>
+          <button onClick={() => drawioFileInputRef.current?.click()}>
+            📥 Importar draw.io
+          </button>
+          <button onClick={handleLoadSample}>
+            Cargar ejemplo (Cliente/Pedido)
+          </button>
           <button onClick={handleReset}>Vaciar</button>
           <button onClick={handleExportEa}>📤 Exportar a EA (.xml)</button>
-          <button onClick={() => drawioFileInputRef.current?.click()}>📥 Importar EA/draw.io</button>
+          <button onClick={() => drawioFileInputRef.current?.click()}>
+            📥 Importar EA/draw.io
+          </button>
           <input
             type="file"
             accept=".xml,.drawio,.xmi"

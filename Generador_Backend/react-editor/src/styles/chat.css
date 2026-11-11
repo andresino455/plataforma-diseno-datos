@@ -288,3 +288,21 @@
     border-top: 1px solid var(--line);
   }
 }
+
+.chat-image {
+  display: block;
+  max-width: 280px;
+  max-height: 250px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  margin-top: 8px;
+}
+
+.chat-audio {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 8px;
+}

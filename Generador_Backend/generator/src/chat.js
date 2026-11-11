@@ -3,6 +3,13 @@ const { chatJson } = require("./llm");
 const { summarizeDiagram } = require("./aiAssistant");
 const { OPERATION_TYPES, operationShapesBlock } = require("./operationsSchema");
 const { colorForUser } = require("./colors");
+const fs = require("fs");
+const path = require("path");
+
+const { interpretDiagramImage } = require("./imageImport");
+const { interpretCommand } = require("./aiAssistant");
+const { transcribeAudio } = require("./audioTranscription");
+
 
 // Chat grupal del proyecto con una IA que hace de desarrolladora y moderadora.
 //
@@ -24,14 +31,18 @@ const HISTORY_FOR_MODEL = 30; // mensajes que se le dan de contexto a la IA
 const MODEL_CONTEXT_CHARS = 12000; // tope aproximado del historial enviado
 const MAX_OPERATIONS = 40;
 
-const insertMessage = db.prepare(
-  `INSERT INTO chat_messages (project_id, user_id, role, content, operations, created_at)
-   VALUES (?, ?, ?, ?, ?, ?)`
-);
+const insertMessage = db.prepare(`
+  INSERT INTO chat_messages
+  (project_id, user_id, role, content, operations, attachment, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
 
 const MESSAGE_SELECT = `
-  SELECT c.id, c.role, c.user_id, c.content, c.operations, c.applied_by, c.created_at, u.name AS user_name
-    FROM chat_messages c LEFT JOIN users u ON u.id = c.user_id`;
+  SELECT c.id, c.role, c.user_id, c.content, c.operations,
+         c.attachment, c.applied_by, c.created_at,
+         u.name AS user_name
+  FROM chat_messages c
+  LEFT JOIN users u ON u.id = c.user_id`;
 
 const selectById = db.prepare(`${MESSAGE_SELECT} WHERE c.id = ? AND c.project_id = ?`);
 const selectLast = db.prepare(`${MESSAGE_SELECT} WHERE c.project_id = ? ORDER BY c.id DESC LIMIT ?`);
@@ -50,6 +61,106 @@ const selectParticipation = db.prepare(
    ) GROUP BY user_id`
 );
 const selectDiagram = db.prepare("SELECT diagram FROM projects WHERE id = ?");
+
+
+
+function getCurrentDiagram(room) {
+  if (room.lastDiagram) {
+    return room.lastDiagram;
+  }
+
+  const stored = selectDiagram.get(room.projectId)?.diagram;
+
+  try {
+    return stored
+      ? JSON.parse(stored)
+      : {
+          entities: [],
+          relationships: [],
+        };
+  } catch {
+    return {
+      entities: [],
+      relationships: [],
+    };
+  }
+}
+
+async function processAttachment(room, info, attachment, userText = "") {
+  try {
+    if (!attachment?.filename) {
+      throw new Error("El archivo no tiene un nombre válido.");
+    }
+
+    const filename = path.basename(attachment.filename);
+
+    if (filename !== attachment.filename) {
+      throw new Error("Nombre de archivo no válido.");
+    }
+
+    const uploadDir = path.join(db.DATA_DIR, "chat-uploads");
+    const filePath = path.join(uploadDir, filename);
+
+    const buffer = await fs.promises.readFile(filePath);
+
+    if (!buffer.length) {
+      throw new Error("El archivo está vacío.");
+    }
+
+    const diagram = getCurrentDiagram(room);
+    const diagramSummary = summarizeDiagram(diagram);
+
+    let result;
+    let aiMessage;
+
+    if (attachment.kind === "image") {
+      const imageBase64 = buffer.toString("base64");
+
+      result = await interpretDiagramImage(
+        imageBase64,
+        attachment.mimeType,
+        diagramSummary,
+      );
+
+      aiMessage = result.message;
+    } else if (attachment.kind === "audio") {
+      const transcript = await transcribeAudio(
+        buffer,
+        attachment.mimeType,
+        filename,
+      );
+
+      result = await interpretCommand(transcript, diagramSummary);
+
+      aiMessage =
+        `🎙️ **Transcripción del audio:**\n${transcript}\n\n` + result.message;
+    } else {
+      return;
+    }
+
+    const operations = sanitizeOperations(result.operations);
+
+    const row = saveAndLoad({
+      projectId: room.projectId,
+      userId: null,
+      role: "assistant",
+      content: aiMessage || "He analizado el archivo.",
+      operations,
+    });
+
+    room.broadcast({
+      type: "chat_message",
+      message: toClient(row),
+    });
+  } catch (err) {
+    console.error("Error procesando archivo multimedia:", err);
+
+    room.broadcast({
+      type: "chat_message",
+      message: systemMessage(`⚠️ No pude procesar el archivo: ${err.message}`),
+    });
+  }
+}
 
 function parseOperations(json) {
   if (!json) return [];
@@ -72,6 +183,7 @@ function toClient(row) {
     color: row.user_id ? colorForUser(row.user_id) : null,
     text: row.content,
     operations,
+    attachment: row.attachment ? JSON.parse(row.attachment) : null,
     appliedBy: row.applied_by,
     createdAt: row.created_at,
   };
@@ -250,18 +362,26 @@ function parseAiResponse(raw) {
 
 // ── Flujo del chat ───────────────────────────────────────────────────────────
 
-function saveAndLoad({ projectId, userId, role, content, operations }) {
+function saveAndLoad({
+  projectId,
+  userId,
+  role,
+  content,
+  operations,
+  attachment,
+}) {
   const info = insertMessage.run(
     projectId,
     userId,
     role,
-    content,
-    operations && operations.length ? JSON.stringify(operations) : null,
-    new Date().toISOString()
+    content || "",
+    operations?.length ? JSON.stringify(operations) : null,
+    attachment ? JSON.stringify(attachment) : null,
+    new Date().toISOString(),
   );
+
   return selectById.get(info.lastInsertRowid, projectId);
 }
-
 async function runAi(room) {
   try {
     const raw = await chatJson(buildMessages(room), RESPONSE_SCHEMA);
@@ -272,6 +392,31 @@ async function runAi(room) {
     console.error("Error de la IA en el chat:", err.message);
     room.broadcast({ type: "chat_message", message: systemMessage(`⚠️ ${err.message}`) });
   }
+}
+
+
+
+function handleAttachmentMessage(room, info, attachment, text = "") {
+  if (!attachment || !["image", "audio"].includes(attachment.kind)) {
+    return;
+  }
+
+  const row = saveAndLoad({
+    projectId: room.projectId,
+    userId: info.id,
+    role: "user",
+    content: String(text).slice(0, MAX_MESSAGE_CHARS),
+    attachment,
+  });
+
+  // Primero compartimos el archivo con todos los miembros.
+  room.broadcast({
+    type: "chat_message",
+    message: toClient(row),
+  });
+
+  // Después iniciamos el procesamiento de IA sin bloquear el WebSocket.
+  processAttachment(room, info, attachment, text);
 }
 
 // Una sola respuesta de IA a la vez por proyecto. Si mencionan a la IA mientras
@@ -328,4 +473,11 @@ function requestApply(room, ws, info, messageId) {
   room.broadcast({ type: "chat_message_update", message: toClient(selectById.get(id, room.projectId)) });
 }
 
-module.exports = { loadHistory, handleUserMessage, requestApply, parseAiResponse, MENTION_RE };
+module.exports = {
+  loadHistory,
+  handleUserMessage,
+  handleAttachmentMessage,
+  requestApply,
+  parseAiResponse,
+  MENTION_RE,
+};

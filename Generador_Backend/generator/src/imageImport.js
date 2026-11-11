@@ -20,12 +20,16 @@ Si la imagen no parece ser un diagrama de datos (por ejemplo, es una foto de otr
 Sé conciso en "message" (una sola oración). No repitas información innecesaria en las operaciones.`;
 }
 
-async function interpretDiagramImage(imageBase64, mimeType) {
+async function interpretDiagramImage(
+  imageBase64,
+  mimeType,
+  currentDiagram = null,
+) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     throw new Error(
       "Falta configurar GROQ_API_KEY. Creá un archivo .env en la carpeta 'generator' " +
-        "(podés copiar .env.example) con tu API key de https://console.groq.com/keys"
+        "(podés copiar .env.example) con tu API key de https://console.groq.com/keys",
     );
   }
 
@@ -55,7 +59,21 @@ async function interpretDiagramImage(imageBase64, mimeType) {
         {
           role: "user",
           content: [
-            { type: "text", text: "Reconstruí este diagrama de datos." },
+            {
+              type: "text",
+              text:
+                "Analizá esta imagen como una referencia para el diagrama del proyecto. " +
+                "Identificá sus entidades, atributos y relaciones y generá las operaciones necesarias. " +
+                "Compará los elementos detectados con el diagrama actual para evitar duplicar entidades, " +
+                "atributos o relaciones que ya existen. No elimines elementos existentes salvo que " +
+                "la imagen y la instrucción del usuario indiquen claramente que deben eliminarse.\n\n" +
+                "Diagrama actual:\n" +
+                JSON.stringify(
+                  currentDiagram || { entities: [], relationships: [] },
+                  null,
+                  2,
+                ),
+            },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
@@ -65,7 +83,9 @@ async function interpretDiagramImage(imageBase64, mimeType) {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Error de la API de Groq (visión, ${response.status}): ${errText}`);
+    throw new Error(
+      `Error de la API de Groq (visión, ${response.status}): ${errText}`,
+    );
   }
 
   const data = await response.json();
@@ -79,11 +99,16 @@ async function interpretDiagramImage(imageBase64, mimeType) {
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw new Error("No se pudo interpretar la respuesta de la IA como JSON: " + raw.slice(0, 200));
+    throw new Error(
+      "No se pudo interpretar la respuesta de la IA como JSON: " +
+        raw.slice(0, 200),
+    );
   }
 
   if (!Array.isArray(parsed.operations)) {
-    throw new Error("La respuesta de la IA no tiene el formato esperado (falta 'operations').");
+    throw new Error(
+      "La respuesta de la IA no tiene el formato esperado (falta 'operations').",
+    );
   }
 
   return parsed;

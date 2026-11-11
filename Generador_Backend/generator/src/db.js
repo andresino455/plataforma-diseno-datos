@@ -56,19 +56,28 @@ db.exec(`
   -- Chat grupal del proyecto (lo ven todos los miembros). Los mensajes de la
   -- IA tienen user_id NULL y role = 'assistant'; si proponen cambios al
   -- diagrama, quedan en "operations" (JSON) hasta que alguien los aplique.
-  CREATE TABLE IF NOT EXISTS chat_messages (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    user_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
-    role       TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-    content    TEXT NOT NULL,
-    operations TEXT,
-    applied_by TEXT,
-    created_at TEXT NOT NULL
-  );
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
+  role       TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content    TEXT NOT NULL,
+  operations TEXT,
+  attachment TEXT,
+  applied_by TEXT,
+  created_at TEXT NOT NULL
+);
 
   CREATE INDEX IF NOT EXISTS idx_chat_project ON chat_messages(project_id, id);
 `);
 
+const chatColumns = db
+  .prepare("PRAGMA table_info(chat_messages)")
+  .all()
+  .map((column) => column.name);
+
+if (!chatColumns.includes("attachment")) {
+  db.exec("ALTER TABLE chat_messages ADD COLUMN attachment TEXT");
+}
 module.exports = db;
 module.exports.DATA_DIR = DATA_DIR;

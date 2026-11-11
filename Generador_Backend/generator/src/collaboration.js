@@ -40,9 +40,13 @@ function setupCollaboration(server) {
   const wss = new WebSocket.Server({ server, maxPayload: MAX_PAYLOAD_BYTES });
 
   const selectDiagram = db.prepare("SELECT diagram FROM projects WHERE id = ?");
-  const updateDiagram = db.prepare("UPDATE projects SET diagram = ?, updated_at = datetime('now') WHERE id = ?");
+  const updateDiagram = db.prepare(
+    "UPDATE projects SET diagram = ?, updated_at = datetime('now') WHERE id = ?",
+  );
   const selectUser = db.prepare("SELECT id, name FROM users WHERE id = ?");
-  const selectMember = db.prepare("SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?");
+  const selectMember = db.prepare(
+    "SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?",
+  );
 
   // Un "room" por proyecto con gente conectada: los clientes y la última
   // versión conocida del diagrama. Se descarta cuando se va el último.
@@ -109,8 +113,12 @@ function setupCollaboration(server) {
   function broadcastPresence(room) {
     // Si el mismo usuario tiene dos pestañas abiertas, se muestra una sola vez.
     const unique = new Map();
-    for (const c of room.clients.values()) unique.set(c.id, { id: c.id, name: c.name, color: c.color });
-    const message = JSON.stringify({ type: "presence", users: [...unique.values()] });
+    for (const c of room.clients.values())
+      unique.set(c.id, { id: c.id, name: c.name, color: c.color });
+    const message = JSON.stringify({
+      type: "presence",
+      users: [...unique.values()],
+    });
     for (const ws of room.clients.keys()) {
       if (ws.readyState === WebSocket.OPEN) ws.send(message);
     }
@@ -159,12 +167,24 @@ function setupCollaboration(server) {
     // Si ya hay un diagrama conocido para este proyecto, se lo mandamos al
     // que se acaba de unir para que arranque viendo lo mismo que los demás.
     if (room.lastDiagram) {
-      ws.send(JSON.stringify({ type: "diagram_update", diagram: room.lastDiagram, fromId: null }));
+      ws.send(
+        JSON.stringify({
+          type: "diagram_update",
+          diagram: room.lastDiagram,
+          fromId: null,
+        }),
+      );
     }
 
     // El chat: historial guardado y, si la IA está respondiendo, el aviso "escribiendo".
-    ws.send(JSON.stringify({ type: "chat_history", messages: chat.loadHistory(projectId) }));
-    if (room.aiRunning) ws.send(JSON.stringify({ type: "ai_typing", typing: true }));
+    ws.send(
+      JSON.stringify({
+        type: "chat_history",
+        messages: chat.loadHistory(projectId),
+      }),
+    );
+    if (room.aiRunning)
+      ws.send(JSON.stringify({ type: "ai_typing", typing: true }));
 
     broadcastPresence(room);
 
@@ -184,10 +204,22 @@ function setupCollaboration(server) {
         room.lastDiagram = msg.diagram;
         scheduleSave(room);
 
-        const out = JSON.stringify({ type: "diagram_update", diagram: msg.diagram, fromId: info.id });
+        const out = JSON.stringify({
+          type: "diagram_update",
+          diagram: msg.diagram,
+          fromId: info.id,
+        });
         for (const clientWs of room.clients.keys()) {
-          if (clientWs !== ws && clientWs.readyState === WebSocket.OPEN) clientWs.send(out);
+          if (clientWs !== ws && clientWs.readyState === WebSocket.OPEN)
+            clientWs.send(out);
         }
+      } else if (msg.type === "chat_attachment") {
+        chat.handleAttachmentMessage(
+          room,
+          info,
+          msg.attachment,
+          msg.text || "",
+        );
       }
     });
 
@@ -208,7 +240,8 @@ function setupCollaboration(server) {
     const room = rooms.get(projectId);
     if (!room) return;
     for (const [ws, info] of room.clients) {
-      if (info.id === userId) ws.close(CLOSE_FORBIDDEN, "Ya no tenés acceso a este proyecto");
+      if (info.id === userId)
+        ws.close(CLOSE_FORBIDDEN, "Ya no tenés acceso a este proyecto");
     }
   }
 
@@ -219,7 +252,8 @@ function setupCollaboration(server) {
     room.dirty = false;
     if (room.saveTimer) clearTimeout(room.saveTimer);
     rooms.delete(projectId);
-    for (const ws of room.clients.keys()) ws.close(CLOSE_NOT_FOUND, "El proyecto fue eliminado");
+    for (const ws of room.clients.keys())
+      ws.close(CLOSE_NOT_FOUND, "El proyecto fue eliminado");
   }
 
   // Guarda todo lo pendiente (se usa al apagar el servidor con Ctrl+C).

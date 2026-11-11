@@ -4,7 +4,10 @@ import "../styles/chat.css";
 
 // Atajos que le piden a la IA que haga de moderadora o de desarrolladora.
 const QUICK_ACTIONS = [
-  { label: "📝 Resumir", text: "@IA resumí lo que venimos hablando: acuerdos, decisiones pendientes y quién propuso qué." },
+  {
+    label: "📝 Resumir",
+    text: "@IA resumí lo que venimos hablando: acuerdos, decisiones pendientes y quién propuso qué.",
+  },
   {
     label: "🧭 Moderar",
     text: "@IA actuá como moderadora: ¿quiénes participaron, qué falta decidir y a quién le pedirías opinión?",
@@ -37,13 +40,22 @@ function describeOperation(op) {
 
 // Markdown mínimo, sin dangerouslySetInnerHTML: **negrita**, `código` y @IA resaltado.
 function renderInline(text, keyPrefix) {
-  return text.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`|@IA(?![\wáéíóúñ]))/gi).map((part, i) => {
-    const key = `${keyPrefix}-${i}`;
-    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={key}>{part.slice(2, -2)}</strong>;
-    if (/^`[^`]+`$/.test(part)) return <code key={key}>{part.slice(1, -1)}</code>;
-    if (/^@IA$/i.test(part)) return <span key={key} className="chat-mention">{part}</span>;
-    return part;
-  });
+  return text
+    .split(/(\*\*[^*\n]+\*\*|`[^`\n]+`|@IA(?![\wáéíóúñ]))/gi)
+    .map((part, i) => {
+      const key = `${keyPrefix}-${i}`;
+      if (/^\*\*[^*]+\*\*$/.test(part))
+        return <strong key={key}>{part.slice(2, -2)}</strong>;
+      if (/^`[^`]+`$/.test(part))
+        return <code key={key}>{part.slice(1, -1)}</code>;
+      if (/^@IA$/i.test(part))
+        return (
+          <span key={key} className="chat-mention">
+            {part}
+          </span>
+        );
+      return part;
+    });
 }
 
 // Separa los bloques ```código``` del resto del texto.
@@ -53,11 +65,13 @@ function renderMessageText(text) {
   let last = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
-    if (match.index > last) blocks.push({ kind: "text", value: text.slice(last, match.index) });
+    if (match.index > last)
+      blocks.push({ kind: "text", value: text.slice(last, match.index) });
     blocks.push({ kind: "code", value: match[1].replace(/\n$/, "") });
     last = regex.lastIndex;
   }
-  if (last < text.length) blocks.push({ kind: "text", value: text.slice(last) });
+  if (last < text.length)
+    blocks.push({ kind: "text", value: text.slice(last) });
 
   return blocks.map((block, i) =>
     block.kind === "code" ? (
@@ -76,23 +90,129 @@ function renderMessageText(text) {
             </span>
           ))}
       </p>
-    )
+    ),
   );
 }
 
 function formatTime(iso) {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+}
+
+import { API_BASE, authHeaders } from "../api";
+
+async function uploadChatFile(projectId, file, kind) {
+  const formData = new FormData();
+
+  formData.append("kind", kind);
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE}/api/chat/${projectId}/files`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.error || "No se pudo subir el archivo.");
+  }
+
+  return result.attachment;
+}
+
+function ChatAttachment({ attachment }) {
+  const [mediaUrl, setMediaUrl] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!attachment?.url) return;
+
+    let objectUrl = null;
+    let cancelled = false;
+
+    async function loadAttachment() {
+      try {
+        const response = await fetch(`${API_BASE}${attachment.url}`, {
+          method: "GET",
+          headers: authHeaders(),
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo cargar el archivo.");
+        }
+
+        const blob = await response.blob();
+
+        if (cancelled) return;
+
+        objectUrl = URL.createObjectURL(blob);
+        setMediaUrl(objectUrl);
+      } catch (err) {
+        console.error("Error cargando adjunto:", err);
+        if (!cancelled) setError(true);
+      }
+    }
+
+    loadAttachment();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment?.url]);
+
+  if (error) {
+    return <span>No se pudo cargar el archivo.</span>;
+  }
+
+  if (!mediaUrl) {
+    return <span>Cargando archivo...</span>;
+  }
+
+  if (attachment.kind === "image") {
+    return (
+      <img src={mediaUrl} alt="Imagen compartida" className="chat-image" />
+    );
+  }
+
+  if (attachment.kind === "audio") {
+    return (
+      <audio
+        src={mediaUrl}
+        controls
+        preload="metadata"
+        className="chat-audio"
+      />
+    );
+  }
+
+  return null;
 }
 
 /**
  * Chat grupal del proyecto. Todos los miembros ven los mismos mensajes; la IA
  * responde cuando la mencionan con @IA y puede proponer cambios al diagrama.
  */
-export default function ChatPanel({ chat, myId, connected, onClose }) {
+export default function ChatPanel({
+  chat,
+  myId,
+  connected,
+  onClose,
+  projectId,
+}) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState(null);
   const listRef = useRef(null);
+
+  // Referencias para grabación de audio
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const [recording, setRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +234,88 @@ export default function ChatPanel({ chat, myId, connected, onClose }) {
     const clean = value.trim();
     if (!clean) return;
     if (chat.send(clean)) setText("");
+  }
+
+  async function startRecording() {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        throw new Error("Tu navegador no permite grabar audio.");
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+      const recorder = new MediaRecorder(stream);
+
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        try {
+          const audioBlob = new Blob(chunksRef.current, {
+            type: recorder.mimeType || "audio/webm",
+          });
+
+          const audioFile = new File([audioBlob], "nota-de-voz.webm", {
+            type: audioBlob.type,
+          });
+
+          setUploading(true);
+
+          const attachment = await uploadChatFile(
+            projectId,
+            audioFile,
+            "audio",
+          );
+
+          chat.sendAttachment(attachment);
+        } catch (error) {
+          console.error(error);
+          alert(error.message);
+        } finally {
+          stream.getTracks().forEach((track) => track.stop());
+          setUploading(false);
+          setRecording(false);
+          recorderRef.current = null;
+        }
+      };
+
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch (error) {
+      console.error("Error al grabar:", error);
+      alert(error.message);
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
+  }
+
+  async function sendImage(file) {
+    if (!file || !projectId) return;
+
+    try {
+      setUploading(true);
+
+      const attachment = await uploadChatFile(projectId, file, "image");
+
+      chat.sendAttachment(attachment);
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      setUploading(false);
+    }
   }
 
   function handleKeyDown(e) {
@@ -144,8 +346,9 @@ export default function ChatPanel({ chat, myId, connected, onClose }) {
       <div className="chat-messages" ref={listRef}>
         {chat.messages.length === 0 && (
           <p className="chat-empty">
-            Este chat lo ven todos los miembros del proyecto. Escribí <span className="chat-mention">@IA</span> para
-            hablarle a la IA: modera la conversación y puede proponer soluciones para el diagrama.
+            Este chat lo ven todos los miembros del proyecto. Escribí{" "}
+            <span className="chat-mention">@IA</span> para hablarle a la IA:
+            modera la conversación y puede proponer soluciones para el diagrama.
           </p>
         )}
 
@@ -163,15 +366,38 @@ export default function ChatPanel({ chat, myId, connected, onClose }) {
           const hasOps = isAi && m.operations?.length > 0;
 
           return (
-            <div key={m.id} className={`chat-msg ${mine ? "chat-msg--mine" : ""} ${isAi ? "chat-msg--ai" : ""}`}>
+            <div
+              key={m.id}
+              className={`chat-msg ${mine ? "chat-msg--mine" : ""} ${isAi ? "chat-msg--ai" : ""}`}
+            >
               <div className="chat-meta">
-                <span className="chat-author" style={{ color: isAi ? undefined : m.color }}>
+                <span
+                  className="chat-author"
+                  style={{ color: isAi ? undefined : m.color }}
+                >
                   {isAi ? "🤖 IA" : mine ? "Vos" : m.name}
                 </span>
                 <span className="chat-time">{formatTime(m.createdAt)}</span>
               </div>
               <div className="chat-bubble">
                 {renderMessageText(m.text)}
+                {m.attachment?.kind === "image" && (
+                  <img
+                    src={`${API_BASE}${m.attachment.url}`}
+                    alt="Imagen compartida"
+                    className="chat-image"
+                  />
+                )}
+
+                {m.attachment?.kind === "audio" && (
+                  <audio
+                    controls
+                    preload="metadata"
+                    src={`${API_BASE}${m.attachment.url}`}
+                  />
+                )}
+
+                {m.attachment && <ChatAttachment attachment={m.attachment} />}
 
                 {hasOps && (
                   <div className="chat-ops">
@@ -182,9 +408,15 @@ export default function ChatPanel({ chat, myId, connected, onClose }) {
                       ))}
                     </ul>
                     {m.appliedBy ? (
-                      <span className="chat-applied">✔ Aplicado por {m.appliedBy}</span>
+                      <span className="chat-applied">
+                        ✔ Aplicado por {m.appliedBy}
+                      </span>
                     ) : (
-                      <button className="primary" onClick={() => chat.requestApply(m.id)} disabled={!connected}>
+                      <button
+                        className="primary"
+                        onClick={() => chat.requestApply(m.id)}
+                        disabled={!connected}
+                      >
                         Aplicar al diagrama
                       </button>
                     )}
@@ -197,30 +429,73 @@ export default function ChatPanel({ chat, myId, connected, onClose }) {
 
         {chat.aiTyping && (
           <div className="chat-typing">
-            🤖 IA está escribiendo<span className="chat-dots" />
+            🤖 IA está escribiendo
+            <span className="chat-dots" />
           </div>
         )}
       </div>
 
       <div className="chat-quick">
         {QUICK_ACTIONS.map((action) => (
-          <button key={action.label} disabled={!connected || chat.aiTyping} onClick={() => submit(action.text)}>
+          <button
+            key={action.label}
+            disabled={!connected || chat.aiTyping}
+            onClick={() => submit(action.text)}
+          >
             {action.label}
           </button>
         ))}
       </div>
 
       <div className="chat-input">
+        <input
+          type="file"
+          accept="image/*"
+          id="chat-image-input"
+          hidden
+          disabled={!connected || uploading}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) sendImage(file);
+            e.target.value = "";
+          }}
+        />
+
+        <label
+          htmlFor="chat-image-input"
+          className="chat-media-button"
+          title="Enviar imagen"
+        >
+          <span>📷</span>
+        </label>
+
+        <button
+          type="button"
+          className="chat-media-button"
+          disabled={!connected || uploading}
+          onClick={recording ? stopRecording : startRecording}
+          title={recording ? "Detener grabación" : "Grabar audio"}
+        >
+          {recording ? "⏹" : "🎤"}
+        </button>
         <textarea
           rows={2}
           value={text}
           maxLength={2000}
-          placeholder={connected ? "Escribí al equipo… (@IA para hablarle a la IA)" : "Sin conexión con el servidor"}
+          placeholder={
+            connected
+              ? "Escribí al equipo… (@IA para hablarle a la IA)"
+              : "Sin conexión con el servidor"
+          }
           disabled={!connected}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
         />
-        <button className="primary" disabled={!connected || !text.trim()} onClick={() => submit(text)}>
+        <button
+          className="primary"
+          disabled={!connected || !text.trim()}
+          onClick={() => submit(text)}
+        >
           Enviar
         </button>
       </div>

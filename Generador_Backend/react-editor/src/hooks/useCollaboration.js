@@ -37,7 +37,13 @@ const BROADCAST_DEBOUNCE_MS = 400;
  * sesión viaja en la URL del WebSocket (el navegador no permite mandar
  * headers personalizados en un WebSocket).
  */
-export function useCollaboration(diagramJson, onRemoteDiagram, projectId, onAccessLost, onApplyOperations) {
+export function useCollaboration(
+  diagramJson,
+  onRemoteDiagram,
+  projectId,
+  onAccessLost,
+  onApplyOperations,
+) {
   const wsRef = useRef(null);
   const suppressNextBroadcastRef = useRef(false);
   const onRemoteDiagramRef = useRef(onRemoteDiagram);
@@ -67,7 +73,7 @@ export function useCollaboration(diagramJson, onRemoteDiagram, projectId, onAcce
     function connect() {
       const token = getToken();
       const ws = new WebSocket(
-        `${COLLAB_WS_BASE_URL}?projectId=${encodeURIComponent(projectId)}&token=${encodeURIComponent(token ?? "")}`
+        `${COLLAB_WS_BASE_URL}?projectId=${encodeURIComponent(projectId)}&token=${encodeURIComponent(token ?? "")}`,
       );
       wsRef.current = ws;
 
@@ -119,9 +125,15 @@ export function useCollaboration(diagramJson, onRemoteDiagram, projectId, onAcce
           setChatMessages(msg.messages);
           setChatLoaded(true);
         } else if (msg.type === "chat_message") {
-          setChatMessages((prev) => (prev.some((m) => m.id === msg.message.id) ? prev : [...prev, msg.message]));
+          setChatMessages((prev) =>
+            prev.some((m) => m.id === msg.message.id)
+              ? prev
+              : [...prev, msg.message],
+          );
         } else if (msg.type === "chat_message_update") {
-          setChatMessages((prev) => prev.map((m) => (m.id === msg.message.id ? msg.message : m)));
+          setChatMessages((prev) =>
+            prev.map((m) => (m.id === msg.message.id ? msg.message : m)),
+          );
         } else if (msg.type === "ai_typing") {
           setAiTyping(Boolean(msg.typing));
         } else if (msg.type === "chat_apply_granted") {
@@ -170,11 +182,30 @@ export function useCollaboration(diagramJson, onRemoteDiagram, projectId, onAcce
     ws.send(JSON.stringify({ type: "chat_apply_request", messageId }));
   }
 
+  function sendChatAttachment(attachment, text = "") {
+    const ws = wsRef.current;
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "chat_attachment",
+        attachment,
+        text,
+      }),
+    );
+
+    return true;
+  }
+
   const chat = {
     messages: chatMessages,
     loaded: chatLoaded,
     aiTyping,
     send: sendChatMessage,
+    sendAttachment: sendChatAttachment,
     requestApply,
   };
 
