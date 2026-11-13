@@ -10,7 +10,6 @@ const { interpretDiagramImage } = require("./imageImport");
 const { interpretCommand } = require("./aiAssistant");
 const { transcribeAudio } = require("./audioTranscription");
 
-
 // Chat grupal del proyecto con una IA que hace de desarrolladora y moderadora.
 //
 // - Todos los miembros ven el mismo chat (se guarda en la tabla chat_messages
@@ -44,25 +43,27 @@ const MESSAGE_SELECT = `
   FROM chat_messages c
   LEFT JOIN users u ON u.id = c.user_id`;
 
-const selectById = db.prepare(`${MESSAGE_SELECT} WHERE c.id = ? AND c.project_id = ?`);
-const selectLast = db.prepare(`${MESSAGE_SELECT} WHERE c.project_id = ? ORDER BY c.id DESC LIMIT ?`);
+const selectById = db.prepare(
+  `${MESSAGE_SELECT} WHERE c.id = ? AND c.project_id = ?`,
+);
+const selectLast = db.prepare(
+  `${MESSAGE_SELECT} WHERE c.project_id = ? ORDER BY c.id DESC LIMIT ?`,
+);
 const markApplied = db.prepare(
   `UPDATE chat_messages SET applied_by = ?
-    WHERE id = ? AND project_id = ? AND role = 'assistant' AND operations IS NOT NULL AND applied_by IS NULL`
+    WHERE id = ? AND project_id = ? AND role = 'assistant' AND operations IS NOT NULL AND applied_by IS NULL`,
 );
 const selectMembers = db.prepare(
   `SELECT u.id, u.name, m.role
      FROM project_members m JOIN users u ON u.id = m.user_id
-    WHERE m.project_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, u.name`
+    WHERE m.project_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, u.name`,
 );
 const selectParticipation = db.prepare(
   `SELECT user_id, COUNT(*) AS n FROM (
       SELECT user_id FROM chat_messages WHERE project_id = ? AND role = 'user' ORDER BY id DESC LIMIT 50
-   ) GROUP BY user_id`
+   ) GROUP BY user_id`,
 );
 const selectDiagram = db.prepare("SELECT diagram FROM projects WHERE id = ?");
-
-
 
 function getCurrentDiagram(room) {
   if (room.lastDiagram) {
@@ -138,7 +139,21 @@ async function processAttachment(room, info, attachment, userText = "") {
       return;
     }
 
+    console.log("\n========== ANÁLISIS DE IMAGEN ==========");
+
+    console.log(
+      "OPERACIONES GENERADAS POR LA IA:",
+      JSON.stringify(result.operations, null, 2),
+    );
+
     const operations = sanitizeOperations(result.operations);
+
+    console.log(
+      "OPERACIONES DESPUÉS DE SANITIZAR:",
+      JSON.stringify(operations, null, 2),
+    );
+
+    console.log("========================================\n");
 
     const row = saveAndLoad({
       projectId: room.projectId,
@@ -232,10 +247,18 @@ Devolvé ÚNICAMENTE un objeto JSON con esta forma: {"message": "tu respuesta pa
 
 function buildContext(projectId, diagram, currentSpeaker) {
   const members = selectMembers.all(projectId);
-  const counts = new Map(selectParticipation.all(projectId).map((r) => [r.user_id, r.n]));
+  const counts = new Map(
+    selectParticipation.all(projectId).map((r) => [r.user_id, r.n]),
+  );
 
-  const memberLine = members.map((m) => `${m.name} (${m.role === "owner" ? "dueño/a" : "colaborador/a"})`).join(", ");
-  const participation = members.map((m) => `${m.name}: ${counts.get(m.id) || 0}`).join(", ");
+  const memberLine = members
+    .map(
+      (m) => `${m.name} (${m.role === "owner" ? "dueño/a" : "colaborador/a"})`,
+    )
+    .join(", ");
+  const participation = members
+    .map((m) => `${m.name}: ${counts.get(m.id) || 0}`)
+    .join(", ");
 
   return `CONTEXTO ACTUAL
 Miembros del proyecto: ${memberLine}
@@ -269,12 +292,21 @@ function buildMessages(room) {
 
   const history = rows.map((r) =>
     r.role === "assistant"
-      ? { role: "assistant", content: JSON.stringify({ message: r.content, operations: parseOperations(r.operations) }) }
-      : { role: "user", content: `${r.user_name || "Usuario"}: ${r.content}` }
+      ? {
+          role: "assistant",
+          content: JSON.stringify({
+            message: r.content,
+            operations: parseOperations(r.operations),
+          }),
+        }
+      : { role: "user", content: `${r.user_name || "Usuario"}: ${r.content}` },
   );
 
   return [
-    { role: "system", content: `${buildSystemPrompt()}\n\n${buildContext(room.projectId, diagram, lastHuman?.user_name)}` },
+    {
+      role: "system",
+      content: `${buildSystemPrompt()}\n\n${buildContext(room.projectId, diagram, lastHuman?.user_name)}`,
+    },
     ...history,
   ];
 }
@@ -318,10 +350,12 @@ function sanitizeOperations(list) {
   if (!Array.isArray(list)) return [];
   const clean = [];
   for (const op of list.slice(0, MAX_OPERATIONS)) {
-    if (!op || typeof op !== "object" || !OPERATION_TYPES.includes(op.type)) continue;
+    if (!op || typeof op !== "object" || !OPERATION_TYPES.includes(op.type))
+      continue;
     const item = {};
     for (const [key, value] of Object.entries(op)) {
-      if (["string", "boolean"].includes(typeof value) && value !== "") item[key] = value;
+      if (["string", "boolean"].includes(typeof value) && value !== "")
+        item[key] = value;
     }
     clean.push(item);
   }
@@ -349,13 +383,18 @@ function parseAiResponse(raw) {
 
   // El modelo no respetó el formato: mostramos lo que escribió tal cual.
   if (!parsed || typeof parsed !== "object") {
-    return { message: String(raw).trim().slice(0, 4000) || "(Sin respuesta)", operations: [] };
+    return {
+      message: String(raw).trim().slice(0, 4000) || "(Sin respuesta)",
+      operations: [],
+    };
   }
 
   const operations = sanitizeOperations(parsed.operations);
   let message = typeof parsed.message === "string" ? parsed.message.trim() : "";
   if (!message) {
-    message = operations.length ? "Te dejo una propuesta de cambios para aplicar al diagrama." : "(La IA no escribió una respuesta.)";
+    message = operations.length
+      ? "Te dejo una propuesta de cambios para aplicar al diagrama."
+      : "(La IA no escribió una respuesta.)";
   }
   return { message, operations };
 }
@@ -386,15 +425,22 @@ async function runAi(room) {
   try {
     const raw = await chatJson(buildMessages(room), RESPONSE_SCHEMA);
     const { message, operations } = parseAiResponse(raw);
-    const row = saveAndLoad({ projectId: room.projectId, userId: null, role: "assistant", content: message, operations });
+    const row = saveAndLoad({
+      projectId: room.projectId,
+      userId: null,
+      role: "assistant",
+      content: message,
+      operations,
+    });
     room.broadcast({ type: "chat_message", message: toClient(row) });
   } catch (err) {
     console.error("Error de la IA en el chat:", err.message);
-    room.broadcast({ type: "chat_message", message: systemMessage(`⚠️ ${err.message}`) });
+    room.broadcast({
+      type: "chat_message",
+      message: systemMessage(`⚠️ ${err.message}`),
+    });
   }
 }
-
-
 
 function handleAttachmentMessage(room, info, attachment, text = "") {
   if (!attachment || !["image", "audio"].includes(attachment.kind)) {
@@ -438,10 +484,17 @@ async function pumpAi(room) {
 
 /** Un miembro escribió en el chat. */
 function handleUserMessage(room, info, rawText) {
-  const text = String(rawText ?? "").trim().slice(0, MAX_MESSAGE_CHARS);
+  const text = String(rawText ?? "")
+    .trim()
+    .slice(0, MAX_MESSAGE_CHARS);
   if (!text) return;
 
-  const row = saveAndLoad({ projectId: room.projectId, userId: info.id, role: "user", content: text });
+  const row = saveAndLoad({
+    projectId: room.projectId,
+    userId: info.id,
+    role: "user",
+    content: text,
+  });
   room.broadcast({ type: "chat_message", message: toClient(row) });
 
   if (MENTION_RE.test(text)) {
@@ -459,18 +512,39 @@ function requestApply(room, ws, info, messageId) {
   const row = Number.isInteger(id) ? selectById.get(id, room.projectId) : null;
 
   if (!row || row.role !== "assistant" || !row.operations) {
-    ws.send(JSON.stringify({ type: "chat_message", message: systemMessage("Ese mensaje no tiene cambios para aplicar.") }));
+    ws.send(
+      JSON.stringify({
+        type: "chat_message",
+        message: systemMessage("Ese mensaje no tiene cambios para aplicar."),
+      }),
+    );
     return;
   }
 
   if (markApplied.run(info.name, id, room.projectId).changes === 0) {
     const by = row.applied_by ? `por ${row.applied_by}` : "";
-    ws.send(JSON.stringify({ type: "chat_message", message: systemMessage(`Esos cambios ya fueron aplicados ${by}.`.trim()) }));
+    ws.send(
+      JSON.stringify({
+        type: "chat_message",
+        message: systemMessage(
+          `Esos cambios ya fueron aplicados ${by}.`.trim(),
+        ),
+      }),
+    );
     return;
   }
 
-  ws.send(JSON.stringify({ type: "chat_apply_granted", messageId: id, operations: parseOperations(row.operations) }));
-  room.broadcast({ type: "chat_message_update", message: toClient(selectById.get(id, room.projectId)) });
+  ws.send(
+    JSON.stringify({
+      type: "chat_apply_granted",
+      messageId: id,
+      operations: parseOperations(row.operations),
+    }),
+  );
+  room.broadcast({
+    type: "chat_message_update",
+    message: toClient(selectById.get(id, room.projectId)),
+  });
 }
 
 module.exports = {

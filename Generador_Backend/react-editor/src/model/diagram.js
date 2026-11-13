@@ -3,7 +3,16 @@
 // Si el equipo agrega un tipo de dato o un tipo de relación nuevo, se
 // declara acá y en el generador.
 
-export const TYPES = ["UUID", "String", "Integer", "Long", "Double", "Boolean", "Date", "DateTime"];
+export const TYPES = [
+  "UUID",
+  "String",
+  "Integer",
+  "Long",
+  "Double",
+  "Boolean",
+  "Date",
+  "DateTime",
+];
 
 export const RELATIONSHIP_TYPES = ["ONE_TO_MANY"]; // el generador hoy solo soporta este tipo
 
@@ -41,7 +50,9 @@ export function ensureUniqueIds(entities, relationships = []) {
       seenAttrs.add(attr.id);
       return attr;
     });
-    return attributes.some((a, i) => a !== next.attributes[i]) ? { ...next, attributes } : next;
+    return attributes.some((a, i) => a !== next.attributes[i])
+      ? { ...next, attributes }
+      : next;
   });
 
   const seenRels = new Set();
@@ -65,7 +76,14 @@ export function createEmptyEntity(index = 0, name = "NuevaEntidad") {
     name,
     position: gridPosition(index),
     attributes: [
-      { id: uid("a"), name: "id", type: "UUID", isPrimaryKey: true, nullable: false, unique: false },
+      {
+        id: uid("a"),
+        name: "id",
+        type: "UUID",
+        isPrimaryKey: true,
+        nullable: false,
+        unique: false,
+      },
     ],
   };
 }
@@ -77,17 +95,29 @@ export function findFreePosition(entities) {
   const SPACING_X = 360; // deja ~100 px entre tarjetas para que se vean las líneas de relación
   const SPACING_Y = 300;
   for (let i = 0; ; i += 1) {
-    const pos = { x: (i % COLS) * SPACING_X, y: Math.floor(i / COLS) * SPACING_Y };
+    const pos = {
+      x: (i % COLS) * SPACING_X,
+      y: Math.floor(i / COLS) * SPACING_Y,
+    };
     const taken = entities.some((e) => {
       const p = e.position || { x: 0, y: 0 };
-      return Math.abs(p.x - pos.x) < SPACING_X - 20 && Math.abs(p.y - pos.y) < SPACING_Y - 20;
+      return (
+        Math.abs(p.x - pos.x) < SPACING_X - 20 &&
+        Math.abs(p.y - pos.y) < SPACING_Y - 20
+      );
     });
     if (!taken) return pos;
   }
 }
 
-export function createEntityInFreeSpot(existingEntities, name = "NuevaEntidad") {
-  return { ...createEmptyEntity(0, name), position: findFreePosition(existingEntities) };
+export function createEntityInFreeSpot(
+  existingEntities,
+  name = "NuevaEntidad",
+) {
+  return {
+    ...createEmptyEntity(0, name),
+    position: findFreePosition(existingEntities),
+  };
 }
 
 // Ubica las entidades nuevas en una grilla simple para que no aparezcan
@@ -103,7 +133,14 @@ export function gridPosition(index) {
 }
 
 export function createEmptyAttribute() {
-  return { id: uid("a"), name: "campo", type: "String", isPrimaryKey: false, nullable: true, unique: false };
+  return {
+    id: uid("a"),
+    name: "campo",
+    type: "String",
+    isPrimaryKey: false,
+    nullable: true,
+    unique: false,
+  };
 }
 
 export function createEmptyRelationship(entities) {
@@ -122,27 +159,88 @@ export const SAMPLE_DIAGRAM = {
   basePackage: "com.tienda.generado",
   entities: [
     {
-      id: "e1", name: "Cliente", position: { x: 0, y: 0 }, attributes: [
-        { id: "a1", name: "id", type: "UUID", isPrimaryKey: true, nullable: false, unique: false },
-        { id: "a2", name: "nombre", type: "String", isPrimaryKey: false, nullable: false, unique: false },
-        { id: "a3", name: "correo", type: "String", isPrimaryKey: false, nullable: false, unique: true },
+      id: "e1",
+      name: "Cliente",
+      position: { x: 0, y: 0 },
+      attributes: [
+        {
+          id: "a1",
+          name: "id",
+          type: "UUID",
+          isPrimaryKey: true,
+          nullable: false,
+          unique: false,
+        },
+        {
+          id: "a2",
+          name: "nombre",
+          type: "String",
+          isPrimaryKey: false,
+          nullable: false,
+          unique: false,
+        },
+        {
+          id: "a3",
+          name: "correo",
+          type: "String",
+          isPrimaryKey: false,
+          nullable: false,
+          unique: true,
+        },
       ],
     },
     {
-      id: "e2", name: "Pedido", position: { x: 320, y: 0 }, attributes: [
-        { id: "b1", name: "id", type: "UUID", isPrimaryKey: true, nullable: false, unique: false },
-        { id: "b2", name: "fecha", type: "Date", isPrimaryKey: false, nullable: false, unique: false },
-        { id: "b3", name: "total", type: "Double", isPrimaryKey: false, nullable: false, unique: false },
+      id: "e2",
+      name: "Pedido",
+      position: { x: 320, y: 0 },
+      attributes: [
+        {
+          id: "b1",
+          name: "id",
+          type: "UUID",
+          isPrimaryKey: true,
+          nullable: false,
+          unique: false,
+        },
+        {
+          id: "b2",
+          name: "fecha",
+          type: "Date",
+          isPrimaryKey: false,
+          nullable: false,
+          unique: false,
+        },
+        {
+          id: "b3",
+          name: "total",
+          type: "Double",
+          isPrimaryKey: false,
+          nullable: false,
+          unique: false,
+        },
       ],
     },
   ],
   relationships: [
-    { id: "r1", from: "e1", to: "e2", type: "ONE_TO_MANY", fromRole: "pedidos", toRole: "cliente" },
+    {
+      id: "r1",
+      from: "e1",
+      to: "e2",
+      type: "ONE_TO_MANY",
+      fromRole: "pedidos",
+      toRole: "cliente",
+    },
   ],
 };
 
 // Convierte el estado de la UI en el JSON exacto que consume el generador.
-export function buildDiagramJson({ projectName, basePackage, entities, relationships }) {  return {
+export function buildDiagramJson({
+  projectName,
+  basePackage,
+  entities,
+  relationships,
+}) {
+  return {
     diagramId: "react-editor-" + Date.now(),
     type: "data-model",
     projectName,
@@ -161,7 +259,12 @@ export function buildDiagramJson({ projectName, basePackage, entities, relations
       })),
     })),
     relationships: relationships.map((r) => ({
-      id: r.id, from: r.from, to: r.to, type: r.type, fromRole: r.fromRole, toRole: r.toRole,
+      id: r.id,
+      from: r.from,
+      to: r.to,
+      type: r.type,
+      fromRole: r.fromRole,
+      toRole: r.toRole,
     })),
   };
 }
@@ -178,19 +281,26 @@ export function buildDiagramJson({ projectName, basePackage, entities, relations
  * agrega una advertencia legible para el usuario.
  */
 export function applyOperations(entities, relationships, operations) {
-  let nextEntities = entities.map((e) => ({ ...e, attributes: [...e.attributes] }));
+  let nextEntities = entities.map((e) => ({
+    ...e,
+    attributes: [...e.attributes],
+  }));
   let nextRelationships = [...relationships];
   const warnings = [];
 
   function findEntity(name) {
-    return nextEntities.find((e) => e.name.toLowerCase() === String(name).toLowerCase());
+    return nextEntities.find(
+      (e) => e.name.toLowerCase() === String(name).toLowerCase(),
+    );
   }
 
   for (const op of operations || []) {
     switch (op.type) {
       case "ADD_ENTITY": {
         if (findEntity(op.name)) {
-          warnings.push(`La entidad "${op.name}" ya existe, no se creó de nuevo.`);
+          warnings.push(
+            `La entidad "${op.name}" ya existe, no se creó de nuevo.`,
+          );
           break;
         }
         nextEntities.push(createEntityInFreeSpot(nextEntities, op.name));
@@ -200,16 +310,24 @@ export function applyOperations(entities, relationships, operations) {
       case "ADD_ATTRIBUTE": {
         const entity = findEntity(op.entityName);
         if (!entity) {
-          warnings.push(`No encontré la entidad "${op.entityName}" para agregarle el campo "${op.name}".`);
+          warnings.push(
+            `No encontré la entidad "${op.entityName}" para agregarle el campo "${op.name}".`,
+          );
           break;
         }
-        if (entity.attributes.some((a) => a.name.toLowerCase() === String(op.name).toLowerCase())) {
+        if (
+          entity.attributes.some(
+            (a) => a.name.toLowerCase() === String(op.name).toLowerCase(),
+          )
+        ) {
           warnings.push(`El campo "${op.name}" ya existe en "${entity.name}".`);
           break;
         }
         const type = TYPES.includes(op.dataType) ? op.dataType : "String";
         if (!TYPES.includes(op.dataType)) {
-          warnings.push(`Tipo de dato "${op.dataType}" no reconocido, se usó "String" para "${op.name}".`);
+          warnings.push(
+            `Tipo de dato "${op.dataType}" no reconocido, se usó "String" para "${op.name}".`,
+          );
         }
         entity.attributes.push({
           id: uid("a"),
@@ -225,25 +343,54 @@ export function applyOperations(entities, relationships, operations) {
       case "ADD_RELATIONSHIP": {
         const from = findEntity(op.fromEntity);
         const to = findEntity(op.toEntity);
+
         if (!from || !to) {
-          warnings.push(`No pude crear la relación entre "${op.fromEntity}" y "${op.toEntity}" (alguna entidad no existe).`);
+          warnings.push(
+            `No pude crear la relación entre "${op.fromEntity}" y "${op.toEntity}" (alguna entidad no existe).`,
+          );
           break;
         }
+
+        if (from.id === to.id) {
+          warnings.push(
+            "No se puede crear una relación de una entidad consigo misma.",
+          );
+          break;
+        }
+
+        const relType = RELATIONSHIP_TYPES.includes(op.relType)
+          ? op.relType
+          : "ONE_TO_MANY";
+
+        const exists = nextRelationships.some(
+          (r) => r.from === from.id && r.to === to.id && r.type === relType,
+        );
+
+        if (exists) {
+          warnings.push(
+            `La relación entre "${from.name}" y "${to.name}" ya existe.`,
+          );
+          break;
+        }
+
         nextRelationships.push({
           id: uid("r"),
           from: from.id,
           to: to.id,
-          type: RELATIONSHIP_TYPES.includes(op.relType) ? op.relType : "ONE_TO_MANY",
+          type: relType,
           fromRole: op.fromRole || "items",
           toRole: op.toRole || "padre",
         });
+
         break;
       }
 
       case "RENAME_ENTITY": {
         const entity = findEntity(op.oldName);
         if (!entity) {
-          warnings.push(`No encontré la entidad "${op.oldName}" para renombrar.`);
+          warnings.push(
+            `No encontré la entidad "${op.oldName}" para renombrar.`,
+          );
           break;
         }
         entity.name = op.newName;
@@ -257,7 +404,9 @@ export function applyOperations(entities, relationships, operations) {
           break;
         }
         nextEntities = nextEntities.filter((e) => e.id !== entity.id);
-        nextRelationships = nextRelationships.filter((r) => r.from !== entity.id && r.to !== entity.id);
+        nextRelationships = nextRelationships.filter(
+          (r) => r.from !== entity.id && r.to !== entity.id,
+        );
         break;
       }
 
@@ -268,7 +417,8 @@ export function applyOperations(entities, relationships, operations) {
           break;
         }
         entity.attributes = entity.attributes.filter(
-          (a) => a.name.toLowerCase() !== String(op.attributeName).toLowerCase()
+          (a) =>
+            a.name.toLowerCase() !== String(op.attributeName).toLowerCase(),
         );
         break;
       }
